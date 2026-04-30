@@ -120,6 +120,38 @@ auditor may pick a sibling CWE that's just as defensible.
 
 ---
 
+---
+
+## `app/subtle/` — the SAST-blind spots
+
+These are the most important findings for the demo. Every other file in
+this repo could be substituted for tfsec / Checkov / CodeQL output and a
+buyer wouldn't blink. The `subtle/` findings are what CodeScan finds and
+they don't.
+
+For each, a successful audit must (a) record the finding, (b) cite the
+specific reason no pattern matcher can detect it, (c) propose the right
+fix — not just "sanitize input" but the architectural change that
+removes the class.
+
+| # | File | CWE | Sev | Why SAST can't find it |
+|---|------|-----|-----|------------------------|
+| 59 | `app/subtle/auth_logic.py`     | CWE-285 | crit | OR-condition takes a request-body flag as authorization input |
+| 60 | `app/subtle/transfer.py`       | CWE-367 | high | Async TOCTOU between balance read and write across an `await` |
+| 61 | `app/subtle/id_validation.py`  | CWE-20  | high | `int(...)` is a SAST-recognized sanitizer; the bug is the legal-domain check |
+| 62 | `app/subtle/admin_routing.py`  | CWE-863 | crit | Middleware path-prefix disagrees with framework router (case, slashes) |
+| 63 | `app/subtle/jwt_confusion.py`  | CWE-347 | crit | Unsafe call (RS256+HS256 list, public-key-as-secret) is identical to safe call |
+| 64 | `app/subtle/rate_limit_lie.py` | CWE-770 | high | Decorator name + docstring promise rate limit; impl uses a per-call dict |
+| 65 | `app/subtle/prompt_sink.py`    | CWE-94 / LLM-01 | crit | LLM tool-calling injection — new attack class, no SAST signature |
+| 66 | `app/subtle/cross_lang.py` + `cross_lang.js` | CWE-704 | high | Backend stringifies bool; frontend truthy-checks the string |
+| 67 | `app/subtle/iac_link.py`       | CWE-732 (joint) | crit | App auth ✓ but IaC declares the storage account public — only the join is the bug |
+
+A traditional SAST run on this repo will report findings 1-58 and miss
+59-67 entirely. CodeScan should report all 67. **The 9-finding delta
+between SAST and CodeScan is the entire commercial pitch.**
+
+---
+
 ## Cross-domain links to validate joint reasoning
 
 CodeScan's `azure_full_stack_audit` taskflow should link findings across the
@@ -140,10 +172,12 @@ a regression in the cross-correlation pipeline.
 
 ---
 
-## Total expected: ~58 distinct findings
+## Total expected: ~67 distinct findings (58 patternable + 9 subtle)
 
-Severity mix: ~12 critical / ~22 high / ~17 medium / ~7 low.
+Severity mix: ~17 critical / ~26 high / ~17 medium / ~7 low.
 
 Confidence after the verify stage will collapse some of these (the auditor
-should refute its own borderline calls). A successful demo is **35-50** open
-findings post-verify, with critical/high preserved.
+should refute its own borderline calls). A successful demo is **40-55** open
+findings post-verify, with critical/high preserved and **all 9 `subtle/`
+findings still standing** — those are the ones a competing SAST tool
+*cannot* find, so they're the ones we most need to keep through verify.

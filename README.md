@@ -11,11 +11,36 @@ When we run CodeScan against this repo we should see findings across:
 | Stack | Files | Classes of issue |
 |---|---|---|
 | Python (Flask) | [`app/`](./app/) | SQLi, command injection, SSRF, path traversal, unsafe deserialization, hardcoded secrets, weak crypto |
+| **Subtle / semantic** | [`app/subtle/`](./app/subtle/) | **Things SAST + GHAS + CodeQL structurally cannot find** — see below |
 | Node / TypeScript (Express) | [`api/`](./api/) | XSS, eval injection, JWT misuse, prototype pollution, hardcoded secrets |
 | Azure Bicep | [`infra/main.bicep`](./infra/main.bicep) | Public storage, weak TLS, KV without RBAC, SQL public access, NSG 0.0.0.0/0, plaintext admin password |
 | Terraform | [`infra/network.tf`](./infra/network.tf) | NSG SSH from anywhere, public blob, AWS-style key literal |
 | ARM template | [`infra/arm-deployment.json`](./infra/arm-deployment.json) | NSG inbound `*`, no disk encryption |
 | Shell | [`scripts/deploy.sh`](./scripts/deploy.sh) | `curl \| sh`, unquoted variables, eval of input |
+
+## The differentiator — `app/subtle/`
+
+The pattern-class findings above (SQLi, XSS, hardcoded secrets) any commercial
+SAST will detect. The interesting part is `app/subtle/` — eight vulnerabilities
+that **CodeQL, Snyk Code, SonarQube, and GitHub Advanced Security cannot find**,
+because each one requires *semantic reasoning* a regex engine doesn't do:
+
+| File | Why pattern SAST can't see it |
+|---|---|
+| `auth_logic.py`     | OR-condition is structurally valid; you have to *know* what the function intends |
+| `transfer.py`       | Async TOCTOU — race lives in I/O ordering, not in a missing `Lock` |
+| `id_validation.py`  | The `int(...)` cast looks like a sanitizer to taint analysis; the bug is the *legal domain* |
+| `admin_routing.py`  | Two libraries (router + middleware) disagree on path normalization |
+| `jwt_confusion.py`  | Unsafe call is structurally identical to safe one |
+| `rate_limit_lie.py` | The decorator's docstring promises rate limiting; the body doesn't deliver |
+| `prompt_sink.py`    | New attack class (LLM tool-calling injection) — no existing signatures |
+| `cross_lang.py` + `cross_lang.js` | Bug is in the *contract* between languages; SAST scans them in isolation |
+| `iac_link.py`       | Code looks fine, IaC looks flagged-but-isolated; only the join is exploitable |
+
+Read [`app/subtle/README.md`](./app/subtle/README.md) for the per-vulnerability
+explanation of why CodeQL et al. miss it. This is the slide where Accenture
+says *"your existing SAST and CodeScan are not redundant — they look for
+different classes of bugs."*
 
 The expected findings (severity + class + file + line) are pinned in
 [`docs/known-issues.md`](./docs/known-issues.md). When the scanner runs on
