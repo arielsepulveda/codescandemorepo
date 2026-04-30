@@ -4,26 +4,32 @@
 > purpose. It is the demo target for [Accenture CodeScan](https://github.com/arielsepulveda/CodeScan).
 > Do **not** deploy any of this. Do **not** copy snippets into real projects.
 
-## Why this exists
+## What's in here, and why
 
-When we run CodeScan against this repo we should see findings across:
+The repo is split into two halves:
 
-| Stack | Files | Classes of issue |
-|---|---|---|
-| Python (Flask) | [`app/`](./app/) | SQLi, command injection, SSRF, path traversal, unsafe deserialization, hardcoded secrets, weak crypto |
-| **Subtle / semantic** | [`app/subtle/`](./app/subtle/) | **Things SAST + GHAS + CodeQL structurally cannot find** — see below |
-| Node / TypeScript (Express) | [`api/`](./api/) | XSS, eval injection, JWT misuse, prototype pollution, hardcoded secrets |
-| Azure Bicep | [`infra/main.bicep`](./infra/main.bicep) | Public storage, weak TLS, KV without RBAC, SQL public access, NSG 0.0.0.0/0, plaintext admin password |
-| Terraform | [`infra/network.tf`](./infra/network.tf) | NSG SSH from anywhere, public blob, AWS-style key literal |
-| ARM template | [`infra/arm-deployment.json`](./infra/arm-deployment.json) | NSG inbound `*`, no disk encryption |
-| Shell | [`scripts/deploy.sh`](./scripts/deploy.sh) | `curl \| sh`, unquoted variables, eval of input |
+### Half 1 — *baseline* findings (the SAST-detectable cases)
 
-## The differentiator — `app/subtle/`
+A handful of textbook vulnerabilities every SAST tool catches. They exist
+so the demo proves CodeScan **doesn't miss the obvious stuff** that GHAS /
+CodeQL / SonarQube find for free.
 
-The pattern-class findings above (SQLi, XSS, hardcoded secrets) any commercial
-SAST will detect. The interesting part is `app/subtle/` — eight vulnerabilities
-that **CodeQL, Snyk Code, SonarQube, and GitHub Advanced Security cannot find**,
-because each one requires *semantic reasoning* a regex engine doesn't do:
+| File | CWE | Class | Why it's here |
+|---|---|---|---|
+| [`app/main.py`](./app/main.py)         | CWE-89  | SQL injection (f-string) | textbook taint flow |
+| [`app/main.py`](./app/main.py)         | CWE-798 | Hardcoded `SECRET_KEY`   | textbook secret scan |
+| [`app/auth.py`](./app/auth.py)         | CWE-327 | MD5 for password hashing | textbook weak-crypto rule |
+| [`app/requirements.txt`](./app/requirements.txt) | CWE-1104 | Outdated deps with public CVEs | textbook SCA case |
+| [`infra/main.bicep`](./infra/main.bicep)         | CWE-732 | Storage `allowBlobPublicAccess: true` | textbook IaC posture |
+| [`infra/main.bicep`](./infra/main.bicep)         | CWE-284 | NSG SSH from `*`            | textbook IaC posture |
+
+**6 findings.** Anything claiming to do code security catches all 6.
+
+### Half 2 — *the differentiator*: [`app/subtle/`](./app/subtle/)
+
+Eight vulnerabilities that **CodeQL, Snyk Code, SonarQube, and GitHub
+Advanced Security cannot find**, because each one requires *semantic
+reasoning* a regex engine doesn't do.
 
 | File | Why pattern SAST can't see it |
 |---|---|
@@ -31,21 +37,36 @@ because each one requires *semantic reasoning* a regex engine doesn't do:
 | `transfer.py`       | Async TOCTOU — race lives in I/O ordering, not in a missing `Lock` |
 | `id_validation.py`  | The `int(...)` cast looks like a sanitizer to taint analysis; the bug is the *legal domain* |
 | `admin_routing.py`  | Two libraries (router + middleware) disagree on path normalization |
-| `jwt_confusion.py`  | Unsafe call is structurally identical to safe one |
+| `jwt_confusion.py`  | Unsafe call is structurally identical to the safe one |
 | `rate_limit_lie.py` | The decorator's docstring promises rate limiting; the body doesn't deliver |
-| `prompt_sink.py`    | New attack class (LLM tool-calling injection) — no existing signatures |
+| `prompt_sink.py`    | New attack class (LLM tool-calling injection) — no signatures |
 | `cross_lang.py` + `cross_lang.js` | Bug is in the *contract* between languages; SAST scans them in isolation |
-| `iac_link.py`       | Code looks fine, IaC looks flagged-but-isolated; only the join is exploitable |
+| `iac_link.py`       | App auth ✓ but `infra/main.bicep` makes the storage public — only the *join* is the bug |
 
-Read [`app/subtle/README.md`](./app/subtle/README.md) for the per-vulnerability
-explanation of why CodeQL et al. miss it. This is the slide where Accenture
-says *"your existing SAST and CodeScan are not redundant — they look for
-different classes of bugs."*
+**8 findings.** A traditional SAST sees zero of these. CodeScan finds all of them.
 
-The expected findings (severity + class + file + line) are pinned in
-[`docs/known-issues.md`](./docs/known-issues.md). When the scanner runs on
-this tree, that file is the oracle — anything missing is a false-negative,
-anything extra is worth reviewing as a possible real find.
+Read [`app/subtle/README.md`](./app/subtle/README.md) for the per-file
+explanation of *why* each one is invisible to pattern-based SAST.
+
+## The number that matters
+
+```
+              GHAS / CodeQL / Snyk      CodeScan
+baseline      6                         6
+subtle        0                         8
+─────────────────────────────────────────────
+total         6                         14
+```
+
+The **8-finding delta** is the entire commercial pitch. It's what justifies
+adding CodeScan to a stack that already has GHAS — it doesn't replace, it
+*finds the bugs the incumbent can't*.
+
+## Total expected: ~14 distinct findings
+
+Severity mix targets ~5 critical / ~6 high / ~3 medium. Numbers may vary
+slightly depending on how the verify stage rules — see
+[`docs/known-issues.md`](./docs/known-issues.md) for the per-finding oracle.
 
 ## How to use as a scan target
 
@@ -58,25 +79,17 @@ codescan scan -t accenture_codescan.taskflows.azure_full_stack_audit \
   --max-usd 5 -o ./scan-out
 ```
 
-### Via webhook
+### Via webhook + PR comments
 
 Configure the GitHub webhook on this repo to point at your CodeScan API. Push
-or open a PR; the scan-Job clones, scans, and (for PRs) posts inline review
-comments.
-
-### Triggering a PR-feedback round
+or open a PR; the scan-Job clones, scans, and posts inline review comments
+on the PR for findings inside the changed lines.
 
 ```bash
-git checkout -b demo/sql-injection
-# edit app/main.py, push, open a PR, watch CodeScan comment on it
+git checkout -b demo/fix-sql-injection
+# fix the SQLi in app/main.py, push, open a PR
+# CodeScan should reduce its open-finding count by 1 on this branch
 ```
-
-## Counts
-
-- ~25 expected findings, mixed severity
-- 6 stacks, 8 source files
-- Two distinct CWEs at the same line (CWE-89 + CWE-22 in `app/upload.py`) so
-  we can validate dedup_key collision behaviour.
 
 ## License
 

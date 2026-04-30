@@ -1,8 +1,6 @@
-# Pinned to known-vulnerable versions on purpose.
-# CodeScan + dependency-aware checks should flag these.
-Flask==1.0.0          # CVE-2018-1000656 + dozens of post-1.0 fixes
+# Pinned to known-vulnerable versions on purpose so the dependency
+# advisory side of the demo has something to chew on. Every dependency
+# scanner (Dependabot, Snyk, Trivy) catches these — included because we
+# don't want CodeScan to be seen as missing the obvious dep-CVE class.
+Flask==1.0.0          # multiple post-1.0 fixes
 PyJWT==1.6.0          # CVE-2017-11424 (alg=none confusion)
-requests==2.20.0      # CVE-2018-18074 (auth header leak on redirect)
-PyYAML==5.1           # CVE-2020-14343 (full_load / unsafe loaders)
-Jinja2==2.10          # CVE-2019-10906 (sandbox escape)
-Werkzeug==0.15.0      # CVE-2019-14806
