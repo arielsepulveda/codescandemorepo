@@ -1,0 +1,11 @@
+# Local scratch for scan diagnostics on this PUBLIC benchmark repo.
+# Everything in this directory is ignored EXCEPT this file, so the dir
+# still exists after a clone as the designated dump target.
+#
+# Point PlainSight here so dumps/logs never land at the repo root:
+#   $env:PLAINSIGHT_SANITIZER_DUMP_DIR = "_local/sanitize-dump"
+#   $env:PLAINSIGHT_LOG_FILE           = "_local/scan-debug.log"
+#
+# Never commit dumps/logs — they can carry scan internals.
+*
+!.gitignore

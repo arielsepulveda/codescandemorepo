@@ -10,3 +10,11 @@ dist/
 .DS_Store
 .vscode/
 .idea/
+
+# Local scan diagnostics — NEVER commit to this PUBLIC benchmark repo.
+# Prefer putting these under _local/ (see _local/.gitignore); the patterns
+# below are a safety net for stray artifacts left at the repo root.
+*.log
+/sanitize-dump/
+_local/*
+!_local/.gitignore
